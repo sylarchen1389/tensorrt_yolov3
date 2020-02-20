@@ -57,3 +57,20 @@ def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True):
 
     prediction[:,:,:4] *= stride
     return prediction
+
+
+def draw_bboxes(image_raw, bboxes, confidences, categories, all_categories, bbox_color='blue'):
+    
+    draw = ImageDraw.Draw(image_raw)
+    print(bboxes, confidences, categories)
+    for box, score, category in zip(bboxes, confidences, categories):
+        x_coord, y_coord, width, height = box
+        left = max(0, np.floor(x_coord + 0.5).astype(int))
+        top = max(0, np.floor(y_coord + 0.5).astype(int))
+        right = min(image_raw.width, np.floor(x_coord + width + 0.5).astype(int))
+        bottom = min(image_raw.height, np.floor(y_coord + height + 0.5).astype(int))
+
+        draw.rectangle(((left, top), (right, bottom)), outline=bbox_color)
+        draw.text((left, top - 12), '{0} {1:.2f}'.format(all_categories[category], score), fill=bbox_color)
+
+    return image_raw

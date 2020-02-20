@@ -55,7 +55,6 @@ class PrepocessYOLO():
             torch.backends.cudnn.benchmark = True
             torch.cuda.empty_cache()
             a = torch.cuda.FloatTensor().cuda()
-    
 
     def process(self,trt_output):
         with torch.no_grad():
@@ -92,6 +91,10 @@ class PrepocessYOLO():
                     continue
             
             return (main_box_corner,main_clss,main_clss_prob) 
+        
+    def img_size(self):
+        return self. width,self.height   
+
 
 class TrtYOLO():
     def __init__(self,engine_file):
