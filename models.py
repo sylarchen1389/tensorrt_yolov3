@@ -43,14 +43,39 @@ class PrepocessYOLO():
             self.anchors = vanilla_anchor_list
             self.yolo_masks = vanilla_anchor_mask
         else:
+            anchor_list = net_info["anchors"]
             self.yolo_masks = [[int(y) for y in x.split(',')] for x in net_info["yolo_masks"].split('|')]
-            self.anchors  = [[float(y) for y in x.split(',')] for x in row.split("'")[0].split('|')]
+            self.anchors  = [[float(y) for y in x.split(',')] for x in anchor_list.split("'")[0].split('|')]
         ########################
         self.num_anchors = len(anchors)
+        self.CUDA = torch.cuda.is_available()
+        if self.CUDA:
+            torch.cuda.manual_seed(0)
+            torch.cuda.manual_seed_all(0)
+            torch.backends.cudnn.benchmark = True
+            torch.cuda.empty_cache()
+            a = torch.cuda.FloatTensor().cuda()
+    
 
-    def process(self,output):
+    def process(self,trt_output):
         with torch.no_grad():
-            for detections in output:
+            # after process
+            for output, shape, anchor in zip(trt_output, self.output_shapes, self.anchors):
+                output = output.reshape(shape)
+                trt_output = torch.from_numpy(output).cuda().data
+                # print(trt_output.shape)
+                trt_output = predict_transform(trt_output, self.inp_dim, anchor, self.num_classes, self.CUDA)
+                # print("inp_dim:",self.inp_dim)
+                if type(trt_output) == int:
+                    continue
+                if not write:
+                    outputs = trt_output
+                    write = 1
+                else:
+                    outputs = torch.cat((outputs, trt_output), 1)
+
+            # nms 
+            for detections in outputs:
                 detections = detections[detections[:,4]>self.conf_thres]
                 box_conrner = torch.zeros((detections.shape[0],4),device=detections.device)
                 xy = detections[:,0:2]
@@ -66,10 +91,10 @@ class PrepocessYOLO():
                 if nms_indices.shape[0] == 0:
                     continue
             
-                
+            return (main_box_corner,main_clss,main_clss_prob) 
 
 class TrtYOLO():
-    def __init__(self,engine_file,cfg_file):
+    def __init__(self,engine_file):
         self.engine_file = engine_file
         self.output_shapes = [(1, 255, 19, 19), (1, 255, 38, 38), (1, 255, 76, 76)] #yolo3-608
         

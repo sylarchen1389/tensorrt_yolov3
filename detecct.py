@@ -2,18 +2,22 @@
 from models import PrepocessYOLO,TrtYOLO
 
 
-
-
-
-
+import cv2
 
 
 def main():
+    trt_model = TrtYOLO(engine_file)
     prepocessor = PrepocessYOLO()
-    trt_model = TrtYOLO()
-    detect()
+    detect(prepocessor,trt_model)
+    
+def detect_single(prepocessor,trt_model):
+    img = cv2.imread(path)
+    pad_w,pad_h,ratio = caculate(img_)
+    img_ = pre_img(img)
+    trt_output = trt_model.inference(img_)
+    boxes,clss,clss_prob = prepocessor.process(trt_output)
 
-def detect():
+    drawboxes()
 
 def detect_video():
 
