@@ -110,7 +110,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode',type=str,default='image',help='detect: image or video')
     parser.add_argument('--camera_device',type=int,default=0,help='code of camera device')
 
-    add_bool_arg('vanilla_anchor', default=True, help="whether to use vanilla anchor boxes for training")
+    add_bool_arg('vanilla_anchor', default=True)
 
     opt = parser.parse_args()
 
