@@ -60,7 +60,7 @@ def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True):
 
 
 def draw_bboxes(image_raw, bboxes, confidences, categories, all_categories, bbox_color='blue'):
-    
+
     draw = ImageDraw.Draw(image_raw)
     print(bboxes, confidences, categories)
     for box, score, category in zip(bboxes, confidences, categories):
@@ -74,3 +74,19 @@ def draw_bboxes(image_raw, bboxes, confidences, categories, all_categories, bbox
         draw.text((left, top - 12), '{0} {1:.2f}'.format(all_categories[category], score), fill=bbox_color)
 
     return image_raw
+
+
+
+def calculate_padding(orig_height, orig_width, new_height, new_width):
+    # recalculate the padding
+    if max(orig_height, orig_width) == orig_height:
+        new_img_width = orig_height * new_width / new_height
+        scale_factor = new_height / orig_height
+        pad_h = 0
+        pad_w = int((new_img_width - orig_width) / 2)
+    else:
+        scale_factor = new_width / orig_width
+        new_img_height = orig_width * new_height / new_width
+        pad_w = 0
+        pad_h = int((new_img_height - orig_height) / 2)
+    return pad_h, pad_w, scale_factor
