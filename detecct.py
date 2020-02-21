@@ -12,6 +12,9 @@ import cv2
 
 
 import numpy as np
+import tensorrt as trt
+import pycuda.driver as cuda
+import pycuda.autoinit
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -20,8 +23,8 @@ from torch.utils.data import DataLoader
 from PIL import Image, ImageDraw
 import torchvision
 
-from models import PrepocessYOLO,TrtYOLO
-from utils.utils import draw_bboxes
+from models import PrepocessYOLO,TrtYOLO,trtYOLO
+from utils.utils import draw_bboxes,calculate_padding
 
 
 
@@ -34,35 +37,40 @@ LABEL_FILE_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'coc
 ALL_CATEGORIES = load_label_categories(LABEL_FILE_PATH)
 
 def main(target_path,output_path,engine_file,cfg_file,vanilla_anchor = True,mode = 'image'):
-    trt_model = TrtYOLO(engine_file)
-    prepocessor = PrepocessYOLO(cfg_file,vanilla_anchor=True)
+    #prepocessor = PrepocessYOLO(cfg_file,vanilla_anchor=True)
+    #trt_model = TrtYOLO(engine_file)
+    trt_model = trtYOLO(cfg_file,engine_file,vanilla_anchor=True)
 
     if target_path == None:
         mode = 'video'
     
     print("detect mode is:",mode)
-    if mode == 'image ':
-        detect_single_img(target_path,prepocessor,trt_model)
+    if mode == 'image':
+        detect_single_img(target_path,trt_model)
     elif mode == 'video':
-        detect_video(prepocessor,trt_model)
+        detect_video(trt_model)
     else:
         print("target path error")
 
-def detect_single_img(target_path,prepocessor,trt_model):
+def detect_single_img(target_path,trt_model):
     #img = cv2.imread(target_path)
     #w, h = img.size
     #img_ = img[:,:,::-1].transpose((2,0,1))
 
     img = Image.open(target_path).convert('RGB')
     w, h = img.size
-    new_width, new_height = prepocessor.img_size()
+    new_width, new_height = trt_model.img_size()
     pad_h, pad_w, ratio = calculate_padding(h, w, new_height, new_width)
-    img_ = torchvision.transforms.functional.pad(img_, padding=(pad_w, pad_h, pad_w, pad_h), fill=(127, 127, 127), padding_mode="constant")
+    img_ = torchvision.transforms.functional.pad(img, padding=(pad_w, pad_h, pad_w, pad_h), fill=(127, 127, 127), padding_mode="constant")
     img_ = torchvision.transforms.functional.resize(img_, (new_height, new_width))
     
-    trt_output = trt_model.inference(img_)
-    main_box_corner,clss,clss_prob = prepocessor.process(trt_output)
-    
+    img_array = np.array(img_)
+    print("image shape:",img_array.shape)
+    #trt_output = trt_model.inference(img_array)
+    #main_box_corner,clss,clss_prob = prepocessor.process(trt_output)
+    main_box_corner,clss,clss_prob = trt_model.detection(img_array)
+
+
     img_with_boxes = Image.open(target_path)
     boxes = np.zeros(shape = main_box_corner.shape)
     
