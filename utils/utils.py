@@ -59,7 +59,7 @@ def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True):
     return prediction
 
 
-def draw_bboxes(image_raw, bboxes, confidences, categories, all_categories, bbox_color='blue'):
+def draw_bboxes_pil(image_raw, bboxes, confidences, categories, all_categories, bbox_color='blue'):
 
     draw = ImageDraw.Draw(image_raw)
     print(bboxes, confidences, categories)
@@ -75,7 +75,14 @@ def draw_bboxes(image_raw, bboxes, confidences, categories, all_categories, bbox
 
     return image_raw
 
+def draw_bboxes(image_raw,bboxes,clss,clss_prob,all_categories):
 
+    for box,clss_i,clss_i_prob in zip(bboxes, clss,clss_prob ):
+            text = str(all_categories[clss_i])+ ": "+ str(clss_i_prob)
+            cv2.rectangle(image_raw,(box[0],box[1]),(box[2],box[3]),(255,0,0),2)            
+            cv2.putText(image_raw,text,(box[0],box[1]),
+                cv2.FONT_HERSHEY_SIMPLEX,0.4,(255,255,255),1)
+    return image_raw
 
 def calculate_padding(orig_height, orig_width, new_height, new_width):
     # recalculate the padding

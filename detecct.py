@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 from PIL import Image, ImageDraw
 import torchvision
 
-from models import PrepocessYOLO,TrtYOLO,trtYOLO
+from model import trtYOLO
 from utils.utils import draw_bboxes,calculate_padding
 
 
@@ -36,9 +36,8 @@ def load_label_categories(label_file_path):
 LABEL_FILE_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'coco_labels.txt')
 ALL_CATEGORIES = load_label_categories(LABEL_FILE_PATH)
 
-def main(target_path,output_path,engine_file,cfg_file,vanilla_anchor = True,mode = 'image'):
-    #prepocessor = PrepocessYOLO(cfg_file,vanilla_anchor=True)
-    #trt_model = TrtYOLO(engine_file)
+def main(target_path,engine_file,cfg_file,cam_device = 0,vanilla_anchor = True,mode = 'image'):
+   
     trt_model = trtYOLO(cfg_file,engine_file,vanilla_anchor=True)
 
     if target_path == None:
@@ -48,57 +47,54 @@ def main(target_path,output_path,engine_file,cfg_file,vanilla_anchor = True,mode
     if mode == 'image':
         detect_single_img(target_path,trt_model)
     elif mode == 'video':
-        detect_video(trt_model)
+        detect_video(trt_model,cam_device)
     else:
         print("target path error")
 
 def detect_single_img(target_path,trt_model):
-    #img = cv2.imread(target_path)
-    #w, h = img.size
-    #img_ = img[:,:,::-1].transpose((2,0,1))
-
-    img = Image.open(target_path).convert('RGB')
-    w, h = img.size
-    new_width, new_height = trt_model.img_size()
-    pad_h, pad_w, ratio = calculate_padding(h, w, new_height, new_width)
-    img_ = torchvision.transforms.functional.pad(img, padding=(pad_w, pad_h, pad_w, pad_h), fill=(127, 127, 127), padding_mode="constant")
-    img_ = torchvision.transforms.functional.resize(img_, (new_height, new_width))
-    
-    img_array = np.array(img_)
-    print("image shape:",img_array.shape)
-    #trt_output = trt_model.inference(img_array)
-    #main_box_corner,clss,clss_prob = prepocessor.process(trt_output)
-    main_box_corner,clss,clss_prob = trt_model.detection(img_array)
+    img = cv2.imread(target_path)
+    (boxes,clss,clss_prob) = trt_model.detect_frame(img)
+    for box,clss_i,cls_prob in zip(boxes,clss,clss_prob):
+       print(ALL_CATEGORIES[clss_i]," conf:",cls_prob,box)
+    img_with_boxes = draw_bboxes(img,boxes,clss,clss_prob,ALL_CATEGORIES)
+    cv2.imwrite(target_path.split('/')[-1],img_with_boxes)
 
 
-    img_with_boxes = Image.open(target_path)
-    boxes = np.zeros(shape = main_box_corner.shape)
-    
-    boxes[:,0] = main_box_corner[:, 0].to('cpu').item() / ratio - pad_w
-    boxes[:,1] = main_box_corner[:, 1].to('cpu').item() / ratio - pad_h
-    boxes[:,2] = main_box_corner[:, 2].to('cpu').item() / ratio - pad_w
-    boxes[:,3] = main_box_corner[:, 3].to('cpu').item() / ratio - pad_h 
-    
-    img_with_boxes = draw_bboxes(img,boxes,clss_prob,clss,ALL_CATEGORIES)
-    img_with_boxes.save(target_path.split('/')[-1])
-    
-
-
-def detect_video(Prepocessor,trt_model,device = 0,save_img = True,output_path = 'output/'):
-
-    cap = cv.VideoCapture(device)  # 打开摄像头
-    cap.set(cv.CAP_PROP_FRAME_WIDTH,1024)
-    cap.set(cv.CAP_PROP_FRAME_HEIGHT,720)
+def detect_video(trt_model,cam_device = 0):
+    cap = cv2.VideoCapture(cam_device)  # 打开摄像头
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH,1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT,720)
 
     while True:
-        return_value, img = cap.read() 
-        frame = Image.fromarray(cv2.cvtColor(img,cv2.COLOR_BGR2RGB))
-
+        print("-----------------------------")
+        t_time1 = time.time()
+        return_value, frame = cap.read()  
         if return_value is False:
-            print('read video error')
+            print("[error]open camera fail !")
             exit()
+        t_time2 = time.time()
+        print("[Time]get frame time :",(t_time2-t_time1))
 
-
+        # trt_model.detect_path('data/dog.jpg')
+        (boxes,clss,clss_prob) = trt_model.detect_frame(frame)
+        if boxes is None:
+            img_with_boxes = frame
+        else:
+            for box,clss_i,cls_prob in zip(boxes,clss,clss_prob):
+                print(ALL_CATEGORIES[clss_i]," conf:",cls_prob,box)
+            img_with_boxes = draw_bboxes(frame,boxes,clss,clss_prob,ALL_CATEGORIES)
+        cv2.imshow("img_with_boxes",img_with_boxes)
+        t_time3 = time.time()
+        print("[Time]detect time:",(t_time3-t_time2))
+        if cv2.waitKey(1) & 0xFF == ord('z'):       # 按q退出
+            break
+       
+        print("[Time]total time: ",(t_time3-t_time1))
+        #cv2.imshow("frame",frame)
+        print("FPS: ",1./(t_time3- t_time1))
+    
+    cap.release() 
+    cv2.destroyAllWindows() 
 
 
 if __name__ == '__main__':
@@ -108,19 +104,20 @@ if __name__ == '__main__':
         arg_group.add_argument('--' + name, dest=name, action='store_true', help=help)
         arg_group.add_argument('--no_' + name, dest=name, action='store_false', help=("Do not " + help))
         parser.set_defaults(**{name:default})
-    parser.add_argument('--cfg_file', type=str, default='model_cfg/yolov3-608.cfg')
+    parser.add_argument('--cfg_path', type=str, default='model_cfg/yolov3-608.cfg')
     parser.add_argument('--target_path', type=str,default='data/dog.jpg', help='path to target image/video')
-    parser.add_argument('--output_path', type=str, default="outputs/visualization/")
-    parser.add_argument('--weights_path', type=str, default='yolov3.weights',help='path to weights file')
     parser.add_argument('--engine_file',type=str,default='yolov3-608.trt',help='path to tensortRT engine file')
+    parser.add_argument('--mode',type=str,default='image',help='detect: image or video')
+    parser.add_argument('--camera_device',type=int,default=0,help='code of camera device')
 
     add_bool_arg('vanilla_anchor', default=True, help="whether to use vanilla anchor boxes for training")
 
     opt = parser.parse_args()
 
-    main(target_path=opt.target_path,
-         output_path=opt.output_path,
+    main(cfg_file=opt.cfg_path,
+         target_path=opt.target_path,
          engine_file=opt.engine_file,
-         cfg_file=opt.cfg_file,
+         cam_device=opt.camera_device,
+         mode=opt.mode,
          vanilla_anchor = True)
     
