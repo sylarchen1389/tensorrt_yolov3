@@ -34,7 +34,13 @@ def get_engine(onnx_file_path, engine_file_path=""):
             print('Loading ONNX file from path {}...'.format(onnx_file_path))
             with open(onnx_file_path, 'rb') as model:
                 print('Beginning ONNX file parsing')
-                if not parser.parse(model.readata_processing1, 3, 608, 608]
+                if not parser.parse(model.read()):
+                    print ('ERROR: Failed to parse the ONNX file.')
+                    for error in range(parser.num_errors):
+                        print (parser.get_error(error))
+                    return None
+            # The actual yolov3.onnx is generated with batch size 64. Reshape input to batch size 1
+            network.get_input(0).shape = [1, 3, 608, 608]
             print('Completed parsing of ONNX file')
             print('Building an engine from file {}; this may take a while...'.format(onnx_file_path))
             engine = builder.build_cuda_engine(network)
